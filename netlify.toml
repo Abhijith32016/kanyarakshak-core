@@ -1,0 +1,4 @@
+build]
+  publish = "dashboard"
+  command = ""
+ 
