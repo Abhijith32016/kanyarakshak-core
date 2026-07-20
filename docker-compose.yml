@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  redis-core:
+    image: redis:7.2-alpine
+    container_name: kanyarakshak_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: always
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: kanyarakshak_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: always
+    # First run only: pull a small free model, e.g.
+    #   docker exec -it kanyarakshak_ollama ollama pull llama3.2:3b
+
+volumes:
+  redis_data:
+  ollama_data:

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KanyaRakshak Mesh Node</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Space Grotesk', sans-serif; background-color: #0d0e12; }
+        .sos-glow { animation: pulseGlow 1.8s infinite alternate; }
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 15px #ef4444; transform: scale(1); }
+            100% { box-shadow: 0 0 35px #ef4444, 0 0 50px #b91c1c; transform: scale(1.03); }
+        }
+    </style>
+</head>
+<body class="text-slate-100 overflow-x-hidden min-h-screen flex flex-col">
+
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-4 py-3 sticky top-0 z-50 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+            <h1 class="text-md font-bold tracking-wider text-slate-200">🛡️ KANYARAKSHAK MESH</h1>
+        </div>
+        <div id="session-badge" class="text-xs bg-slate-800 text-cyan-400 px-2 py-1 rounded border border-cyan-500/30">ID: USER-A46FA6</div>
+    </header>
+
+    <main class="flex-1 p-4 max-w-md mx-auto w-full space-y-6 pb-24">
+        
+        <!-- PROTOCOL COMPONENT -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-4">
+            <h2 class="text-sm font-semibold tracking-widest text-slate-400 uppercase">Emergency Protocol Unit</h2>
+            <div class="flex justify-center py-4">
+                <button id="sos-btn" onclick="triggerPanicAlert()" class="w-40 h-40 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white font-bold text-2xl uppercase tracking-wider transition-all active:scale-95 sos-glow flex flex-col justify-center items-center gap-1 border-4 border-red-900">
+                    <span>SOS</span>
+                    <span class="text-[10px] tracking-normal font-normal opacity-80">Tap to Trigger</span>
+                </button>
+            </div>
+            <div class="pt-2">
+                <button id="record-btn" onclick="toggleAudioRecording()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 px-4 rounded-xl text-sm border border-slate-700 flex items-center justify-center gap-2 internal-transition">
+                    <span id="record-dot" class="w-2.5 h-2.5 rounded-full bg-red-500 hidden"></span>
+                    <span id="record-text">🎙️ Record Voice Emotion SOS</span>
+                </button>
+            </div>
+            <p id="system-status" class="text-xs text-slate-400 italic">System active. Tracking node fully operational.</p>
+        </div>
+
+        <!-- LIVE TRACKING CANVAS -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+            <div class="px-4 py-3 bg-slate-950/50 border-b border-slate-800 flex justify-between items-center">
+                <span class="text-xs font-bold tracking-wider text-slate-400 uppercase">Live Operations Grid</span>
+                <span id="coord-display" class="text-[10px] font-mono text-cyan-400">Locating...</span>
+            </div>
+            <div id="map" class="h-64 w-full bg-slate-950"></div>
+        </div>
+
+        <!-- DYNAMIC SAFETY CONVERSATIONAL CHATBOT -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col h-80 space-y-3">
+            <h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">Security Assistant Chat</h3>
+            <div id="chat-box" class="flex-1 overflow-y-auto bg-slate-950 rounded-xl p-3 text-xs space-y-2 border border-slate-800">
+                <div class="text-cyan-400 font-semibold">🤖 Assistant:</div>
+                <div class="text-slate-300 bg-slate-900 p-2 rounded-lg">Ask me about your location safety! Try typing: "Is Hyderabad safe?"</div>
+            </div>
+            <div class="flex gap-2">
+                <input id="chat-input" type="text" placeholder="Type message here..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                <button onclick="sendChatMessage()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-4 py-2 rounded-xl text-xs transition">Send</button>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const sessionId = "USER-A46FA6";
+        // Backend base URL.
+        // Local testing on the same machine: http://localhost:8000
+        // Local testing from your phone on the same WiFi: http://<your-PC-LAN-IP>:8000
+        // Deployed: your Render backend URL, e.g. https://kanyarakshak-core.onrender.com
+        const API_BASE = `https://kanyarakshak-core.onrender.com`;
+        let map, userMarker;
+        let currentLat = 17.5981; 
+        let currentLng = 78.4686;
+        let mediaRecorder, audioChunks = [], isRecording = false;
+
+        function initApp() {
+            map = L.map('map', { zoomControl: false }).setView([currentLat, currentLng], 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+            userMarker = L.circleMarker([currentLat, currentLng], {
+                radius: 8, color: '#22d3ee', fillColor: '#06b6d4', fillOpacity: 0.8
+            }).addTo(map);
+
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(pos => {
+                    currentLat = pos.coords.latitude;
+                    currentLng = pos.coords.longitude;
+                    userMarker.setLatLng([currentLat, currentLng]);
+                    map.panTo([currentLat, currentLng]);
+                    document.getElementById('coord-display').innerText = `${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}`;
+                });
+            }
+            setInterval(sendPassiveTelemetry, 15000);
+        }
+
+        async function sendPassiveTelemetry() {
+            try {
+                await fetch(`${API_BASE}/api/v1/telemetry`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, latitude: currentLat, longitude: currentLng })
+                });
+            } catch (err) {}
+        }
+
+        async function triggerPanicAlert() {
+            const statusEl = document.getElementById('system-status');
+            statusEl.innerText = "🚨 BROADCASTING CRITICAL EMERGENCY SIGNAL TO POLICE...";
+            
+            try {
+                let formData = new FormData();
+                formData.append('session_id', sessionId);
+                formData.append('latitude', currentLat);
+                formData.append('longitude', currentLng);
+                formData.append('audio_file', new Blob([new Uint8Array(10)], {type: 'audio/wav'}), 'sos.wav');
+
+                const res = await fetch(`${API_BASE}/api/v1/voice-distress`, { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                statusEl.innerText = `🚨 Alert Broadcasted Live! Alerted Mesh Responders: ${data.alerted_users.join(', ')}`;
+                statusEl.className = "text-xs text-red-400 font-bold animate-pulse";
+            } catch (err) {
+                statusEl.innerText = "Error broadcasting alert to mesh framework.";
+            }
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const box = document.getElementById('chat-box');
+            if(!input.value.trim()) return;
+
+            const userText = input.value;
+            box.innerHTML += `<div class="text-slate-400 font-semibold mt-2">👤 You:</div><div class="text-slate-200 bg-slate-800/40 p-2 rounded-lg">${userText}</div>`;
+            input.value = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, message: userText })
+                });
+                const data = await res.json();
+                box.innerHTML += `<div class="text-cyan-400 font-semibold mt-2">🤖 Assistant:</div><div class="text-slate-300 bg-slate-900 p-2 rounded-lg">${data.response}</div>`;
+                box.scrollTop = box.scrollHeight;
+            } catch (e) {
+                box.innerHTML += `<div class="text-red-400 mt-2">Error connecting to assistant network node.</div>`;
+            }
+        }
+
+        async function toggleAudioRecording() {
+            const btnText = document.getElementById('record-text');
+            const dot = document.getElementById('record-dot');
+            const statusEl = document.getElementById('system-status');
+
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        let formData = new FormData();
+                        formData.append('session_id', sessionId);
+                        formData.append('latitude', currentLat);
+                        formData.append('longitude', currentLng);
+                        formData.append('audio_file', audioBlob, 'voice_sos.wav');
+
+                        statusEl.innerText = "Analyzing acoustic vocal panic markers...";
+                        const res = await fetch(`${API_BASE}/api/v1/voice-distress`, { method: 'POST', body: formData });
+                        const data = await res.json();
+                        statusEl.innerText = `🚨 Voice Panic Detected! Alerted Users: ${data.alerted_users.join(', ')}`;
+                    };
+                    mediaRecorder.start();
+                    isRecording = true;
+                    btnText.innerText = "⏹️ Stop and Analyze Audio Node";
+                    dot.classList.remove('hidden');
+                } catch (e) { alert("Microphone access blocked."); }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                btnText.innerText = "🎙️ Record Voice Emotion SOS";
+                dot.classList.add('hidden');
+            }
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
