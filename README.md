@@ -6,20 +6,18 @@ Live demo: thunderous-puppy-34aa43.netlify.app
 Hackathon: 🏆 Winner — RAMpage V2.5 24-Hour Hackathon (AI/ML Track) — highest overall score across AI/ML, Web, Blockchain, and IoT tracks
 
 System Architecture
-┌──────────────────┐        HTTPS         ┌───────────────────────┐
+        HTTPS         
 │   Frontend        │ ──────────────────▶ │   Backend (FastAPI)    │
 │   (Netlify)        │ ◀────────────────── │   (Render, Python)     │
 │   HTML/JS/Tailwind │      JSON API        │   async/await          │
-└──────────────────┘                      └───────────┬─────────────┘
+                     
                                                        │
                          ┌─────────────────────────────┼──────────────────────────┐
                          ▼                             ▼                          ▼
-               ┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
                │  Upstash Redis    │       │  Groq LLM API     │       │  ntfy.sh          │
                │  (TLS-secured)    │       │  (Llama 3.1       │       │  (push alerts     │
                │  Geospatial index │       │   8B Instant)     │       │   to responders)  │
                │  + session store  │       │                   │       │                   │
-               └──────────────────┘       └──────────────────┘       └──────────────────┘
 
 Every component is independently deployable and independently replaceable — the LLM provider, cache layer, and notification layer are all swappable without touching the other services. Deliberate microservice decomposition rather than a monolith.
 
