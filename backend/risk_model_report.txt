@@ -1,0 +1,23 @@
+KanyaRakshak Risk Scoring Model — Evaluation Report
+=======================================================
+
+Training samples: 262 | Test samples: 88
+
+Classification Report:
+              precision    recall  f1-score   support
+
+        high       0.92      0.81      0.86        27
+         low       0.74      0.82      0.78        28
+      medium       0.82      0.82      0.82        33
+
+    accuracy                           0.82        88
+   macro avg       0.83      0.82      0.82        88
+weighted avg       0.82      0.82      0.82        88
+
+Confusion Matrix (classes: ['high', 'low', 'medium']):
+[[22  2  3]
+ [ 2 23  3]
+ [ 0  6 27]]
+
+Feature Importances:
+{'latitude': np.float64(0.197), 'longitude': np.float64(0.183), 'hour': np.float64(0.049), 'dist_to_nearest_cluster_km': np.float64(0.571)}

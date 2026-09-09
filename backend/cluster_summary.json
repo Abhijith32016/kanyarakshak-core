@@ -1,0 +1,34 @@
+[
+  {
+    "cluster_id": 1,
+    "incident_count": 60,
+    "centroid_lat": 17.448504,
+    "centroid_lng": 78.391733,
+    "night_incident_pct": 61.7,
+    "dominant_zone_hint": "Isolated stretch near HITEC City outskirts"
+  },
+  {
+    "cluster_id": 3,
+    "incident_count": 60,
+    "centroid_lat": 17.439596,
+    "centroid_lng": 78.467354,
+    "night_incident_pct": 48.3,
+    "dominant_zone_hint": "Under-lit road near Begumpet"
+  },
+  {
+    "cluster_id": 0,
+    "incident_count": 57,
+    "centroid_lat": 17.407921,
+    "centroid_lng": 78.559256,
+    "night_incident_pct": 57.9,
+    "dominant_zone_hint": "Secluded area near Uppal"
+  },
+  {
+    "cluster_id": 2,
+    "incident_count": 57,
+    "centroid_lat": 17.49484,
+    "centroid_lng": 78.363787,
+    "night_incident_pct": 56.1,
+    "dominant_zone_hint": "Poorly lit stretch near Miyapur"
+  }
+]

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import redis
 import httpx
 from dotenv import load_dotenv
+from data_science_routes import router as ds_router
 
 load_dotenv()
 
@@ -15,6 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("KanyaRakshakCore")
 
 app = FastAPI(title="KanyaRakshak Unified Core Engine", version="3.0.0")
+app.include_router(ds_router)
 
 app.add_middleware(
     CORSMiddleware,

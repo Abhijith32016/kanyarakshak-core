@@ -5,7 +5,11 @@ pydantic
 httpx
 python-multipart
 python-dotenv
- 
+scikit-learn
+pandas
+numpy
+joblib
+matplotlib
 
 
 
