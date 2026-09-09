@@ -85,7 +85,10 @@
 
         function initApp() {
             map = L.map('map', { zoomControl: false }).setView([currentLat, currentLng], 15);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
 
             userMarker = L.circleMarker([currentLat, currentLng], {
                 radius: 8, color: '#22d3ee', fillColor: '#06b6d4', fillOpacity: 0.8
