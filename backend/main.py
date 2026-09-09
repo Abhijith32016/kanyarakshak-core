@@ -9,6 +9,8 @@ import redis
 import httpx
 from dotenv import load_dotenv
 from data_science_routes import router as ds_router
+from data_science_routes import _load_artifacts, haversine_km
+import pandas as pd
 
 load_dotenv()
 
@@ -50,7 +52,7 @@ CRIME_RATE_DATABASE = {
 # Sign up free at https://console.groq.com -> API Keys, then set GROQ_API_KEY as an env var.
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "openai/gpt-oss-20b"
 CHAT_HISTORY_TURNS = 8  # how many past messages to keep as context per session
 
 SYSTEM_PROMPT = (
@@ -63,6 +65,50 @@ SYSTEM_PROMPT = (
     "If the user describes an active emergency or says they are in danger, tell them clearly to press the "
     "SOS button in the app or call local emergency services immediately, in addition to anything else you say."
 )
+
+def get_user_risk_context(session_id: str) -> str:
+    """
+    Looks up the user's last known location (from existing telemetry data
+    already in Redis) and returns a short risk-context string to inject
+    into the chatbot's system prompt. Returns an empty string if location
+    or the risk model isn't available, so this never breaks the chat flow.
+    """
+    try:
+        lat = r.get(f"user:{session_id}:lat")
+        lng = r.get(f"user:{session_id}:lng")
+        if lat is None or lng is None:
+            return ""
+
+        bundle, clusters = _load_artifacts()
+        model = bundle["model"]
+        feature_cols = bundle["feature_cols"]
+
+        lat, lng = float(lat), float(lng)
+        hour = __import__("datetime").datetime.utcnow().hour
+
+        if clusters:
+            dists = [haversine_km(lat, lng, c["centroid_lat"], c["centroid_lng"]) for c in clusters]
+            dist_to_nearest = min(dists)
+            nearest_zone = clusters[dists.index(dist_to_nearest)]
+        else:
+            dist_to_nearest = 999.0
+            nearest_zone = None
+
+        features = pd.DataFrame([[lat, lng, hour, dist_to_nearest]], columns=feature_cols)
+        risk_tier = model.predict(features)[0]
+
+        if risk_tier == "low":
+            return ""  # don't clutter the prompt with "you're safe" noise every message
+
+        zone_note = f" near '{nearest_zone['dominant_zone_hint']}'" if nearest_zone else ""
+        return (
+            f"\n\nCONTEXT: This user's current location has a '{risk_tier}' historical risk "
+            f"tier{zone_note} at this time of day, based on our geospatial risk model. "
+            f"Mention this naturally if relevant, without being alarmist."
+        )
+    except Exception as e:
+        logger.error(f"Risk context lookup failed (non-fatal): {e}")
+        return ""
 
 class TelemetryCheckIn(BaseModel):
     session_id: str
@@ -119,7 +165,8 @@ async def chatbot_respond(query: ChatQuery):
 
     history.append({"role": "user", "content": query.message})
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-CHAT_HISTORY_TURNS:]
+    risk_context = get_user_risk_context(query.session_id)
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + risk_context}] + history[-CHAT_HISTORY_TURNS:]
 
     reply_text = None
     if not GROQ_API_KEY:
