@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from data_science_routes import router as ds_router
 from data_science_routes import _load_artifacts, haversine_km
 import pandas as pd
-
+from streaming_pipeline import publish_telemetry_event, run_consumer_loop
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +19,10 @@ logger = logging.getLogger("KanyaRakshakCore")
 
 app = FastAPI(title="KanyaRakshak Unified Core Engine", version="3.0.0")
 app.include_router(ds_router)
+@app.on_event("startup")
+async def start_streaming_consumer():
+    asyncio.create_task(run_consumer_loop(r))
+    logger.info("Streaming ingestion consumer launched at startup.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -146,10 +150,8 @@ async def continuous_tracking_worker(session_id: str, initial_lat: float, initia
 
 @app.post("/api/v1/telemetry")
 async def update_telemetry(data: TelemetryCheckIn):
-    r.set(f"user:{data.session_id}:lat", str(data.latitude))
-    r.set(f"user:{data.session_id}:lng", str(data.longitude))
-    r.geoadd("active_users_mesh", (data.longitude, data.latitude, data.session_id))
-    return {"status": "synchronized"}
+    event_id = publish_telemetry_event(r, data.session_id, data.latitude, data.longitude)
+    return {"status": "queued", "event_id": event_id}
 
 # UNIFIED CHATBOT ENGINE (LLM-backed via Groq cloud API, with per-session memory in Redis)
 @app.post("/api/v1/chat")
