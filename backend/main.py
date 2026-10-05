@@ -135,18 +135,26 @@ async def continuous_tracking_worker(session_id: str, initial_lat: float, initia
         current_lat = float(r.get(f"user:{session_id}:lat") or initial_lat)
         current_lng = float(r.get(f"user:{session_id}:lng") or initial_lng)
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             try:
-                # Continuous broadcast directly to the ntfy channel for police monitoring
-                await client.post(
+                response = await client.post(
                     "https://ntfy.sh/kanyarakshak_alert_channel",
-                    data=f"🚨 [POLICE TRACE FEED] User {session_id} is active.\nLocation: {current_lat},{current_lng}\nMark Solved: {BASE_URL}/api/v1/resolve?session_id={session_id}",
-                    headers={"Title": "ACTIVE PATROL TRACE", "Priority": "4"}
+                    data=f"🚨 EMERGENCY ALERT! User: {session_id}.\nLocation: {latitude},{longitude}\nAlerted Neighbors: {', '.join(nearby_responders)}\nClick to Clear: {BASE_URL}/api/v1/resolve?session_id={session_id}",
+                    headers={
+                        "Title": "CRITICAL EMERGENCY SOS",
+                        "Priority": "5"
+                    }
                 )
+
+                response.raise_for_status()
+
+                logger.info(
+                    f"NTFY SUCCESS: status={response.status_code}, "
+                    f"response={response.text}"
+                )
+
             except Exception as e:
-                logger.error(f"Failed to push tracking loop: {e}")
-                
-        await asyncio.sleep(120)
+                logger.error(f"NTFY SEND FAILED: {e}")
 
 @app.post("/api/v1/telemetry")
 async def update_telemetry(data: TelemetryCheckIn):
