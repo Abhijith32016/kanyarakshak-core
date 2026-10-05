@@ -126,38 +126,26 @@ class ChatQuery(BaseModel):
 # 2-MINUTE POLICE TRACKING LOOP WORKER
 async def continuous_tracking_worker(session_id: str, initial_lat: float, initial_lng: float):
     logger.info(f"Police 2-minute tracking loop spawned for: {session_id}")
-
     while True:
         status = r.get(f"alert:{session_id}:status")
-
         if status != "ACTIVE":
             logger.info(f"Alert resolved. Killing tracking worker for {session_id}.")
             break
-
+            
         current_lat = float(r.get(f"user:{session_id}:lat") or initial_lat)
         current_lng = float(r.get(f"user:{session_id}:lng") or initial_lng)
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        
+        async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(
+                # Continuous broadcast directly to the ntfy channel for police monitoring
+                await client.post(
                     "https://ntfy.sh/kanyarakshak_alert_channel",
-                    data=f"🚨 EMERGENCY ALERT! User: {session_id}.\nLocation: {current_lat},{current_lng}\nClick to Clear: {BASE_URL}/api/v1/resolve?session_id={session_id}",
-                    headers={
-                        "Title": "CRITICAL EMERGENCY SOS",
-                        "Priority": "5"
-                    }
+                    data=f"🚨 [POLICE TRACE FEED] User {session_id} is active.\nLocation: {current_lat},{current_lng}\nMark Solved: {BASE_URL}/api/v1/resolve?session_id={session_id}",
+                    headers={"Title": "ACTIVE PATROL TRACE", "Priority": "4"}
                 )
-
-                response.raise_for_status()
-
-                logger.info(
-                    f"NTFY SUCCESS: status={response.status_code}, "
-                    f"response={response.text}"
-                )
-
             except Exception as e:
-                logger.error(f"NTFY SEND FAILED: {e}")
-
+                logger.error(f"Failed to push tracking loop: {e}")
+                
         await asyncio.sleep(120)
 
 @app.post("/api/v1/telemetry")
