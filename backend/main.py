@@ -222,12 +222,16 @@ async def process_voice_distress(
         logger.error(f"Geospatial mesh error: {e}")
 
     # Dispatch immediately to ntfy.sh for police and responders
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            "https://ntfy.sh/kanyarakshak_alert_channel",
-            data=f"🚨 EMERGENCY ALERT! User: {session_id}.\nLocation: {latitude},{longitude}\nAlerted Neighbors: {', '.join(nearby_responders)}\nClick to Clear: {BASE_URL}/api/v1/resolve?session_id={session_id}",
-            headers={"Title": "CRITICAL EMERGENCY SOS", "Priority": "5"}
-        )
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            await client.post(
+                "https://ntfy.sh/kanyarakshak_alert_channel",
+                data=f"🚨 EMERGENCY ALERT! User: {session_id}.\nLocation: {latitude},{longitude}\nAlerted Neighbors: {', '.join(nearby_responders)}\nClick to Clear: {BASE_URL}/api/v1/resolve?session_id={session_id}",
+                headers={"Title": "CRITICAL EMERGENCY SOS", "Priority": "5"}
+            )
+            logger.info("Immediate NTFY emergency alert sent.")
+        except Exception as e:
+            logger.error(f"Immediate NTFY alert failed: {e}")
 
     # Spawn the 2-minute background tracking loop task
     background_tasks.add_task(continuous_tracking_worker, session_id, latitude, longitude)
