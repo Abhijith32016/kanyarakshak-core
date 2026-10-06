@@ -19,6 +19,17 @@ logger = logging.getLogger("KanyaRakshakCore")
 
 app = FastAPI(title="KanyaRakshak Unified Core Engine", version="3.0.0")
 app.include_router(ds_router)
+
+# Connect to Redis
+# Local dev: falls back to localhost. Deployed: set REDIS_URL to your Upstash "rediss://..." connection string.
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+try:
+    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r.ping()
+    logger.info("Successfully connected to Redis Geospatial fabric.")
+except redis.exceptions.ConnectionError:
+    logger.error("Redis fabric offline!")
+
 @app.on_event("startup")
 async def start_streaming_consumer():
     asyncio.create_task(run_consumer_loop(r))
@@ -32,19 +43,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Connect to Redis
-# Local dev: falls back to localhost. Deployed: set REDIS_URL to your Upstash "rediss://..." connection string.
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-try:
-    r = redis.from_url(REDIS_URL, decode_responses=True)
-    r.ping()
-    logger.info("Successfully connected to Redis Geospatial fabric.")
-except redis.exceptions.ConnectionError:
-    logger.error("Redis fabric offline!")
-
 # Public base URL of this backend, used to build links (e.g. the /resolve link sent to police).
 # Set this to your deployed Render URL, e.g. https://kanyarakshak-core.onrender.com
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
+
+# --- Discord webhook configuration (replaces ntfy.sh, which was unreachable from Render's IP range) ---
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+
+async def send_alert(message: str):
+    """Sends an alert message to Discord via webhook."""
+    if not DISCORD_WEBHOOK_URL:
+        logger.error("DISCORD_WEBHOOK_URL not set.")
+        return
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            await client.post(DISCORD_WEBHOOK_URL, json={"content": message})
+            logger.info("Discord alert sent.")
+        except Exception as e:
+            logger.error(f"Discord alert failed: {type(e).__name__}: {repr(e)}")
 
 CRIME_RATE_DATABASE = {
     "hyderabad": {"risk_level": "Low to Moderate", "safe_zones": ["Gachibowli", "HITEC City"], "caution_zones": ["Isolated dark links"]},
@@ -53,11 +69,10 @@ CRIME_RATE_DATABASE = {
 }
 
 # --- LLM configuration: Groq (free tier, cloud-hosted, OpenAI-compatible API) ---
-# Sign up free at https://console.groq.com -> API Keys, then set GROQ_API_KEY as an env var.
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = "openai/gpt-oss-20b"
-CHAT_HISTORY_TURNS = 8  # how many past messages to keep as context per session
+CHAT_HISTORY_TURNS = 8
 
 SYSTEM_PROMPT = (
     "You are the KanyaRakshak Safety Assistant, a supportive personal-safety chatbot for a women's "
@@ -71,12 +86,6 @@ SYSTEM_PROMPT = (
 )
 
 def get_user_risk_context(session_id: str) -> str:
-    """
-    Looks up the user's last known location (from existing telemetry data
-    already in Redis) and returns a short risk-context string to inject
-    into the chatbot's system prompt. Returns an empty string if location
-    or the risk model isn't available, so this never breaks the chat flow.
-    """
     try:
         lat = r.get(f"user:{session_id}:lat")
         lng = r.get(f"user:{session_id}:lng")
@@ -102,7 +111,7 @@ def get_user_risk_context(session_id: str) -> str:
         risk_tier = model.predict(features)[0]
 
         if risk_tier == "low":
-            return ""  # don't clutter the prompt with "you're safe" noise every message
+            return ""
 
         zone_note = f" near '{nearest_zone['dominant_zone_hint']}'" if nearest_zone else ""
         return (
@@ -123,45 +132,6 @@ class ChatQuery(BaseModel):
     session_id: str
     message: str
 
-@app.get("/api/v1/debug/ntfy-test")
-async def debug_ntfy_test():
-    import time
-    results = {}
-
-    # Test 1: default client (same as your real code)
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post("https://ntfy.sh/kanyarakshak_alert_channel", data="Debug test 1 (default client)")
-            results["test1_default_client"] = {"success": True, "status": resp.status_code, "elapsed": round(time.time() - start, 2)}
-    except Exception as e:
-        results["test1_default_client"] = {"success": False, "error": f"{type(e).__name__}: {repr(e)}", "elapsed": round(time.time() - start, 2)}
-
-    # Test 2: explicitly ignore any proxy env vars Render might be setting
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
-            resp = await client.post("https://ntfy.sh/kanyarakshak_alert_channel", data="Debug test 2 (trust_env=False)")
-            results["test2_no_proxy_env"] = {"success": True, "status": resp.status_code, "elapsed": round(time.time() - start, 2)}
-    except Exception as e:
-        results["test2_no_proxy_env"] = {"success": False, "error": f"{type(e).__name__}: {repr(e)}", "elapsed": round(time.time() - start, 2)}
-
-    # Test 3: just hit ntfy's homepage (no POST) to isolate general reachability
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get("https://ntfy.sh")
-            results["test3_homepage_get"] = {"success": True, "status": resp.status_code, "elapsed": round(time.time() - start, 2)}
-    except Exception as e:
-        results["test3_homepage_get"] = {"success": False, "error": f"{type(e).__name__}: {repr(e)}", "elapsed": round(time.time() - start, 2)}
-
-    # Show relevant environment info
-    results["env_proxy_vars"] = {
-        k: v for k, v in os.environ.items()
-        if "proxy" in k.lower() or "PROXY" in k
-    }
-
-    return results
 # 2-MINUTE POLICE TRACKING LOOP WORKER
 async def continuous_tracking_worker(session_id: str, initial_lat: float, initial_lng: float):
     logger.info(f"Police 2-minute tracking loop spawned for: {session_id}")
@@ -170,21 +140,16 @@ async def continuous_tracking_worker(session_id: str, initial_lat: float, initia
         if status != "ACTIVE":
             logger.info(f"Alert resolved. Killing tracking worker for {session_id}.")
             break
-            
+
         current_lat = float(r.get(f"user:{session_id}:lat") or initial_lat)
         current_lng = float(r.get(f"user:{session_id}:lng") or initial_lng)
-        
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            try:
-                # Continuous broadcast directly to the ntfy channel for police monitoring
-                await client.post(
-                    "https://ntfy.sh/kanyarakshak_alert_channel",
-                    data=f"🚨 [POLICE TRACE FEED] User {session_id} is active.\nLocation: {current_lat},{current_lng}\nMark Solved: {BASE_URL}/api/v1/resolve?session_id={session_id}",
-                    headers={"Title": "ACTIVE PATROL TRACE", "Priority": "4"}
-                )
-            except Exception as e:
-                logger.error(f"Failed to push tracking loop: {type(e).__name__}: {repr(e)}")
-                
+
+        await send_alert(
+            f"🚨 **[POLICE TRACE FEED]** User `{session_id}` is active.\n"
+            f"Location: {current_lat},{current_lng}\n"
+            f"Mark Solved: {BASE_URL}/api/v1/resolve?session_id={session_id}"
+        )
+
         await asyncio.sleep(120)
 
 @app.post("/api/v1/telemetry")
@@ -192,12 +157,11 @@ async def update_telemetry(data: TelemetryCheckIn):
     event_id = publish_telemetry_event(r, data.session_id, data.latitude, data.longitude)
     return {"status": "queued", "event_id": event_id}
 
-# UNIFIED CHATBOT ENGINE (LLM-backed via Groq cloud API, with per-session memory in Redis)
+# UNIFIED CHATBOT ENGINE
 @app.post("/api/v1/chat")
 async def chatbot_respond(query: ChatQuery):
     history_key = f"chat:{query.session_id}:history"
 
-    # Load prior turns for this session
     raw_history = r.get(history_key)
     try:
         history = json.loads(raw_history) if raw_history else []
@@ -249,7 +213,6 @@ async def process_voice_distress(
     r.set(f"user:{session_id}:lat", str(latitude))
     r.set(f"user:{session_id}:lng", str(longitude))
 
-    # Add mock mesh users into the database if the mesh is empty for demonstration purposes
     r.geoadd("active_users_mesh", (longitude + 0.002, latitude + 0.002, "MESH_USER_POLICE_ALPHA"))
     r.geoadd("active_users_mesh", (longitude - 0.001, latitude + 0.001, "MESH_USER_CITIZEN_BRAVO"))
 
@@ -260,19 +223,14 @@ async def process_voice_distress(
     except Exception as e:
         logger.error(f"Geospatial mesh error: {e}")
 
-    # Dispatch immediately to ntfy.sh for police and responders
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            await client.post(
-                "https://ntfy.sh/kanyarakshak_alert_channel",
-                data=f"🚨 EMERGENCY ALERT! User: {session_id}.\nLocation: {latitude},{longitude}\nAlerted Neighbors: {', '.join(nearby_responders)}\nClick to Clear: {BASE_URL}/api/v1/resolve?session_id={session_id}",
-                headers={"Title": "CRITICAL EMERGENCY SOS", "Priority": "5"}
-            )
-            logger.info("Immediate NTFY emergency alert sent.")
-        except Exception as e:
-            logger.error(f"Immediate NTFY alert failed: {type(e).__name__}: {repr(e)}")
+    # Dispatch immediately via Discord webhook
+    await send_alert(
+        f"🚨 **EMERGENCY ALERT!** User: `{session_id}`.\n"
+        f"Location: {latitude},{longitude}\n"
+        f"Alerted Neighbors: {', '.join(nearby_responders)}\n"
+        f"Click to Clear: {BASE_URL}/api/v1/resolve?session_id={session_id}"
+    )
 
-    # Spawn the 2-minute background tracking loop task
     background_tasks.add_task(continuous_tracking_worker, session_id, latitude, longitude)
 
     return {
