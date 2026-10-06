@@ -123,6 +123,45 @@ class ChatQuery(BaseModel):
     session_id: str
     message: str
 
+@app.get("/api/v1/debug/ntfy-test")
+async def debug_ntfy_test():
+    import time
+    results = {}
+
+    # Test 1: default client (same as your real code)
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post("https://ntfy.sh/kanyarakshak_alert_channel", data="Debug test 1 (default client)")
+            results["test1_default_client"] = {"success": True, "status": resp.status_code, "elapsed": round(time.time() - start, 2)}
+    except Exception as e:
+        results["test1_default_client"] = {"success": False, "error": f"{type(e).__name__}: {repr(e)}", "elapsed": round(time.time() - start, 2)}
+
+    # Test 2: explicitly ignore any proxy env vars Render might be setting
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+            resp = await client.post("https://ntfy.sh/kanyarakshak_alert_channel", data="Debug test 2 (trust_env=False)")
+            results["test2_no_proxy_env"] = {"success": True, "status": resp.status_code, "elapsed": round(time.time() - start, 2)}
+    except Exception as e:
+        results["test2_no_proxy_env"] = {"success": False, "error": f"{type(e).__name__}: {repr(e)}", "elapsed": round(time.time() - start, 2)}
+
+    # Test 3: just hit ntfy's homepage (no POST) to isolate general reachability
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get("https://ntfy.sh")
+            results["test3_homepage_get"] = {"success": True, "status": resp.status_code, "elapsed": round(time.time() - start, 2)}
+    except Exception as e:
+        results["test3_homepage_get"] = {"success": False, "error": f"{type(e).__name__}: {repr(e)}", "elapsed": round(time.time() - start, 2)}
+
+    # Show relevant environment info
+    results["env_proxy_vars"] = {
+        k: v for k, v in os.environ.items()
+        if "proxy" in k.lower() or "PROXY" in k
+    }
+
+    return results
 # 2-MINUTE POLICE TRACKING LOOP WORKER
 async def continuous_tracking_worker(session_id: str, initial_lat: float, initial_lng: float):
     logger.info(f"Police 2-minute tracking loop spawned for: {session_id}")
