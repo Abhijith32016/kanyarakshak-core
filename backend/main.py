@@ -85,10 +85,10 @@ SYSTEM_PROMPT = (
     "SOS button in the app or call local emergency services immediately, in addition to anything else you say."
 )
 
-def get_user_risk_context(session_id: str) -> str:
+async def get_user_risk_context(session_id: str) -> str:
     try:
-        lat = r.get(f"user:{session_id}:lat")
-        lng = r.get(f"user:{session_id}:lng")
+        lat = await asyncio.to_thread(r.get, f"user:{session_id}:lat")
+        lng = await asyncio.to_thread(r.get, f"user:{session_id}:lng")
         if lat is None or lng is None:
             return ""
 
@@ -136,13 +136,13 @@ class ChatQuery(BaseModel):
 async def continuous_tracking_worker(session_id: str, initial_lat: float, initial_lng: float):
     logger.info(f"Police 2-minute tracking loop spawned for: {session_id}")
     while True:
-        status = r.get(f"alert:{session_id}:status")
+        status = await asyncio.to_thread(r.get, f"alert:{session_id}:status")
         if status != "ACTIVE":
             logger.info(f"Alert resolved. Killing tracking worker for {session_id}.")
             break
 
-        current_lat = float(r.get(f"user:{session_id}:lat") or initial_lat)
-        current_lng = float(r.get(f"user:{session_id}:lng") or initial_lng)
+        current_lat = float(await asyncio.to_thread(r.get, f"user:{session_id}:lat") or initial_lat)
+        current_lng = float(await asyncio.to_thread(r.get, f"user:{session_id}:lng") or initial_lng)
 
         await send_alert(
             f"🚨 **[POLICE TRACE FEED]** User `{session_id}` is active.\n"
@@ -162,7 +162,7 @@ async def update_telemetry(data: TelemetryCheckIn):
 async def chatbot_respond(query: ChatQuery):
     history_key = f"chat:{query.session_id}:history"
 
-    raw_history = r.get(history_key)
+    raw_history = await asyncio.to_thread(r.get, history_key)
     try:
         history = json.loads(raw_history) if raw_history else []
     except (TypeError, ValueError):
@@ -170,7 +170,7 @@ async def chatbot_respond(query: ChatQuery):
 
     history.append({"role": "user", "content": query.message})
 
-    risk_context = get_user_risk_context(query.session_id)
+    risk_context = await get_user_risk_context(query.session_id)
     messages = [{"role": "system", "content": SYSTEM_PROMPT + risk_context}] + history[-CHAT_HISTORY_TURNS:]
 
     reply_text = None
@@ -196,7 +196,7 @@ async def chatbot_respond(query: ChatQuery):
         )
     else:
         history.append({"role": "assistant", "content": reply_text})
-        r.set(history_key, json.dumps(history[-CHAT_HISTORY_TURNS:]))
+        await asyncio.to_thread(r.set, history_key, json.dumps(history[-CHAT_HISTORY_TURNS:]))
 
     return {"response": reply_text}
 
@@ -209,16 +209,18 @@ async def process_voice_distress(
     longitude: float = Form(...),
     audio_file: UploadFile = File(...)
 ):
-    r.set(f"alert:{session_id}:status", "ACTIVE")
-    r.set(f"user:{session_id}:lat", str(latitude))
-    r.set(f"user:{session_id}:lng", str(longitude))
+    await asyncio.to_thread(r.set, f"alert:{session_id}:status", "ACTIVE")
+    await asyncio.to_thread(r.set, f"user:{session_id}:lat", str(latitude))
+    await asyncio.to_thread(r.set, f"user:{session_id}:lng", str(longitude))
 
-    r.geoadd("active_users_mesh", (longitude + 0.002, latitude + 0.002, "MESH_USER_POLICE_ALPHA"))
-    r.geoadd("active_users_mesh", (longitude - 0.001, latitude + 0.001, "MESH_USER_CITIZEN_BRAVO"))
+    await asyncio.to_thread(r.geoadd, "active_users_mesh", (longitude + 0.002, latitude + 0.002, "MESH_USER_POLICE_ALPHA"))
+    await asyncio.to_thread(r.geoadd, "active_users_mesh", (longitude - 0.001, latitude + 0.001, "MESH_USER_CITIZEN_BRAVO"))
 
     nearby_responders = []
     try:
-        nearby_responders = r.geosearch("active_users_mesh", longitude=longitude, latitude=latitude, radius=500, unit="m")
+        nearby_responders = await asyncio.to_thread(
+            r.geosearch, "active_users_mesh", longitude=longitude, latitude=latitude, radius=500, unit="m"
+        )
         nearby_responders = [user for user in nearby_responders if user != session_id]
     except Exception as e:
         logger.error(f"Geospatial mesh error: {e}")
