@@ -144,7 +144,7 @@ async def continuous_tracking_worker(session_id: str, initial_lat: float, initia
                     headers={"Title": "ACTIVE PATROL TRACE", "Priority": "4"}
                 )
             except Exception as e:
-                logger.error(f"Failed to push tracking loop: {e}")
+                logger.error(f"Failed to push tracking loop: {type(e).__name__}: {repr(e)}")
                 
         await asyncio.sleep(120)
 
@@ -231,7 +231,7 @@ async def process_voice_distress(
             )
             logger.info("Immediate NTFY emergency alert sent.")
         except Exception as e:
-            logger.error(f"Immediate NTFY alert failed: {e}")
+            logger.error(f"Immediate NTFY alert failed: {type(e).__name__}: {repr(e)}")
 
     # Spawn the 2-minute background tracking loop task
     background_tasks.add_task(continuous_tracking_worker, session_id, latitude, longitude)
