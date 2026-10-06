@@ -135,7 +135,7 @@ async def continuous_tracking_worker(session_id: str, initial_lat: float, initia
         current_lat = float(r.get(f"user:{session_id}:lat") or initial_lat)
         current_lng = float(r.get(f"user:{session_id}:lng") or initial_lng)
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             try:
                 # Continuous broadcast directly to the ntfy channel for police monitoring
                 await client.post(
@@ -222,7 +222,7 @@ async def process_voice_distress(
         logger.error(f"Geospatial mesh error: {e}")
 
     # Dispatch immediately to ntfy.sh for police and responders
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             await client.post(
                 "https://ntfy.sh/kanyarakshak_alert_channel",
