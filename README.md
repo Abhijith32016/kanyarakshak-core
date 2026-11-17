@@ -95,6 +95,7 @@ professional advice, or a substitute for contacting local emergency
 services.
 ---
 System architecture
+``` text
 ┌──────────────────────────────┐
 │       Browser Frontend       │
 │  HTML / JavaScript /         │
@@ -127,6 +128,7 @@ System architecture
 │ Discord webhook (deployed    │
 │ prototype integration)       │
 └──────────────────────────────┘
+```
 Deployment components
 Component                             Deployment / service
 ---
@@ -161,7 +163,7 @@ Synthetic-data experiment
 A synthetic location dataset was created to test the initial geospatial
 and risk-classification workflow.
 DBSCAN used Haversine distance with an `eps` setting of 400 metres
-and `min_samples` of 8.
+and `min\_samples` of 8.
 The generated dataset contained four planted spatial zones and 116
 background points treated as noise.
 A Random Forest classifier was used for an initial risk-tier
@@ -196,7 +198,7 @@ performance.
 Backend concurrency and latency
 A Locust test with 10 simulated users exposed a blocking Redis operation
 in an asynchronous request path. Moving the blocking operation to
-`asyncio.to_thread` reduced the measured average SOS endpoint latency.
+`asyncio.to\_thread` reduced the measured average SOS endpoint latency.
 Measurement                                  Before change      After change
 ---
 Requests completed in the reported run                  47                72
@@ -252,7 +254,7 @@ backend is running and the route is enabled.
 Repository structure
 The following is the high-level project layout. Refer to the repository
 itself for the current, exact file tree.
-
+``` text
 kanyarakshak-core/
 ├── backend/
 │   ├── main.py
@@ -267,6 +269,7 @@ kanyarakshak-core/
 ├── netlify.toml
 ├── docker-compose.yml
 └── README.md
+```
 ---
 Local development
 Prerequisites
@@ -278,22 +281,32 @@ A Groq API key
 Node.js is not required for the static HTML frontend unless you add
 a separate frontend build process
 1. Clone the repository
+``` bash
 git clone https://github.com/Abhijith32016/kanyarakshak-core.git
 cd kanyarakshak-core
+```
 2. Install backend dependencies
+``` bash
 cd backend
 pip install -r requirements.txt
+```
 3. Configure environment variables
 Copy the example environment file:
+``` bash
 cp .env.example .env
+```
 Add the required values to `.env`. Do not commit real credentials or
 secrets.
 4. Start the backend
+``` bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 5. Open the frontend
 Open `dashboard/index.html` in a browser and ensure its API base URL
 points to the local backend, normally:
+``` text
 http://localhost:8000
+```
 For local geolocation testing, use a browser-supported secure context
 such as `localhost` and grant location permission.
 ---
@@ -305,11 +318,11 @@ Common configuration values include:
 ---
 Variable                            Purpose
 ---
-`GROQ_API_KEY`                      Credential for Groq API access
-`REDIS_URL`                         Redis connection URL; use the TLS
+`GROQ\_API\_KEY`                      Credential for Groq API access
+`REDIS\_URL`                         Redis connection URL; use the TLS
 URL supplied by Upstash where
 applicable
-`BASE_URL`                          Public backend base URL used when
+`BASE\_URL`                          Public backend base URL used when
 constructing alert or resolution
 links
 Never place API keys, Redis credentials, webhook URLs, or other secrets
@@ -374,8 +387,8 @@ Education Foundation, Hyderabad, India, under the supervision of K.
 Hema.
 Research citation
 If you refer to the research evaluation, cite the project preprint:
-> *KanyaRakshak: A Distributed LLM-Integrated Personal Safety System
-> with Geospatial Risk Scoring and a Real-Data Evaluation.* Zenodo.
+> \*KanyaRakshak: A Distributed LLM-Integrated Personal Safety System
+> with Geospatial Risk Scoring and a Real-Data Evaluation.\* Zenodo.
 > https://doi.org/10.5281/zenodo.23955487
 ---
 Disclaimer
@@ -383,4 +396,4 @@ KanyaRakshak is an academic prototype developed for research and
 demonstration. It is not a certified safety product, emergency dispatch
 platform, or substitute for local emergency services. Location data and
 AI-generated responses may be delayed, unavailable, or inaccurate. Do
-not rely on this application as the only response in an emergency.
+not rely on this application as the only response in an eme
